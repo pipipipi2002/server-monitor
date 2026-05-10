@@ -1,0 +1,59 @@
+# --- Python -----------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+*.egg-info/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+htmlcov/
+.coverage
+.coverage.*
+
+# --- Build / distribution artifacts -----------------------------------------
+build/
+dist/
+*.spec
+!agent/installers/*.spec
+*.exe
+*.msi
+agent-dist/
+agents-dist/
+
+# --- Runtime data & secrets (NEVER commit) ----------------------------------
+.env
+.env.*
+!.env.example
+data/
+*.sqlite
+*.sqlite3
+*.db
+*.db-journal
+
+# --- TLS / certs (Caddy generates these) ------------------------------------
+caddy_data/
+caddy_config/
+certs/
+*.pem
+*.crt
+*.key
+*.p12
+*.pfx
+
+# --- OS / editor ------------------------------------------------------------
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# --- Logs -------------------------------------------------------------------
+*.log
+logs/

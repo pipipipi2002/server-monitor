@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}{{ server.hostname }} — Server Monitor{% endblock %}
+{% block content %}
+<nav>
+    <a href="/" class="secondary">&larr; Dashboard</a>
+</nav>
+<h2>{{ server.hostname }} <small>({{ server.os }})</small></h2>
+
+<form method="get" action="/server/{{ server.id }}">
+    <label for="day">Day:</label>
+    <select id="day" name="day" onchange="this.form.submit()">
+        {% for d in days %}
+            <option value="{{ d }}" {% if d == day %}selected{% endif %}>{{ d }}</option>
+        {% endfor %}
+    </select>
+</form>
+
+<div class="sm-day-grid" id="day-grid">
+    {% for slot in slots %}
+        {% include "_partials/booking_cell.html" %}
+    {% endfor %}
+</div>
+
+{% include "_partials/booking_modal.html" %}
+{% endblock %}

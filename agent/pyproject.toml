@@ -1,0 +1,27 @@
+[project]
+name = "server-monitor-agent"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+  "httpx>=0.27",
+  # Installed only on Windows targets via the PEP 508 marker; PyInstaller bundles it.
+  "pywin32>=306; sys_platform == 'win32'",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+  "pytest-asyncio>=0.23",
+  "pyinstaller>=6.0",
+  "ruff>=0.4",
+]
+
+[project.scripts]
+server-monitor-agent = "server_monitor_agent.__main__:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["server_monitor_agent*"]

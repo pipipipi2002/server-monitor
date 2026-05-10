@@ -1,0 +1,13 @@
+<script>
+    // Subscribe to SSE and dispatch DOM events that templates listen for.
+    (function () {
+        if (!window.EventSource) return;
+        const es = new EventSource("/sse");
+        es.onmessage = function (e) {
+            try {
+                const evt = JSON.parse(e.data);
+                window.dispatchEvent(new CustomEvent("sm:event", { detail: evt }));
+            } catch (_) { /* ignore */ }
+        };
+    })();
+</script>

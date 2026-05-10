@@ -1,0 +1,32 @@
+<div x-data="{ open: false, startAt: '', label: '' }"
+     x-on:sm-open-booking.window="open = true; startAt = $event.detail.startAt; label = $event.detail.label">
+
+    <div class="sm-modal" x-bind:hidden="!open">
+        <div class="sm-modal__panel" x-show="open">
+            <h4>Book <span x-text="label"></span></h4>
+            <form hx-post="/bookings" hx-ext="json-enc" hx-swap="none"
+                  x-on:htmx:after-request.window="if ($event.detail.successful) location.reload()">
+                <input type="hidden" name="server_id" value="{{ server.id }}">
+                <input type="hidden" name="start_at" x-bind:value="startAt">
+                <label>
+                    Your name
+                    <input name="member_name" list="known-members" required autofocus>
+                </label>
+                <datalist id="known-members">
+                    {% for m in members %}<option value="{{ m }}"></option>{% endfor %}
+                </datalist>
+                <label>
+                    Note (optional)
+                    <input name="note" maxlength="200">
+                </label>
+                <div>
+                    <button type="submit">Confirm</button>
+                    <button type="button" class="secondary" x-on:click="open = false">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- json-enc HTMX extension serializes form fields as JSON for our /bookings endpoint -->
+<script src="https://unpkg.com/htmx.org@1.9.12/dist/ext/json-enc.js"></script>

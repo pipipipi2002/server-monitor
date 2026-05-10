@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en" data-tz="{{ display_tz }}">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>{% block title %}Server Monitor{% endblock %}</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+    <link rel="stylesheet" href="/static/app.css">
+    <script defer src="https://unpkg.com/alpinejs@3.13.10/dist/cdn.min.js"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.12/dist/htmx.min.js"></script>
+</head>
+<body>
+    <header class="container">
+        <nav>
+            <ul>
+                <li><strong><a href="/" class="contrast">Server Monitor</a></strong></li>
+            </ul>
+            <ul>
+                <li><a href="/aliases">Aliases</a></li>
+                <li><a href="/enroll">Add server</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main class="container">
+        {% block content %}{% endblock %}
+    </main>
+    {% include "_partials/sse.html" %}
+    <script src="/static/app.js"></script>
+</body>
+</html>

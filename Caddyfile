@@ -1,0 +1,36 @@
+{
+    # Internal CA + automatic self-signed leaf certs. Agents pin /caddy/data/caddy/pki/authorities/local/root.crt.
+    auto_https disable_redirects
+}
+
+{$MONITOR_HOST:monitor.lan}:443 {
+    tls internal
+
+    # Path to the file the monitor exposes for /ca.crt is taken from the env in the
+    # monitor container (CADDY_CA_PATH points at the same volume mounted there).
+    encode gzip
+
+    handle /sse {
+        reverse_proxy monitor:8000 {
+            transport http {
+                read_timeout 0
+                response_header_timeout 0
+            }
+            flush_interval -1
+        }
+    }
+
+    handle {
+        reverse_proxy monitor:8000
+    }
+}
+
+# Plain HTTP listener for the install.sh/install.ps1 first-bootstrap fetch of /ca.crt.
+:80 {
+    handle /ca.crt {
+        reverse_proxy monitor:8000
+    }
+    handle {
+        redir https://{$MONITOR_HOST:monitor.lan}{uri} 308
+    }
+}

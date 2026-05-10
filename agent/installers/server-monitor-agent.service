@@ -1,0 +1,21 @@
+[Unit]
+Description=Server Monitor Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/server-monitor-agent --monitor-url ${MONITOR_URL} --ca-bundle /etc/server-monitor-agent/ca.pem run
+EnvironmentFile=-/etc/server-monitor-agent/env
+Restart=on-failure
+RestartSec=5
+User=root
+Group=root
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/etc/server-monitor-agent
+
+[Install]
+WantedBy=multi-user.target

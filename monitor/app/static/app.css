@@ -1,0 +1,48 @@
+:root { --sm-card-min: 280px; }
+
+.sm-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(var(--sm-card-min), 1fr));
+    gap: 1rem;
+}
+
+.sm-card { padding: 1rem; border: 1px solid var(--pico-muted-border-color); border-radius: 0.5rem; }
+.sm-card h3 { margin: 0 0 0.25rem 0; }
+
+.sm-badge { display: inline-block; padding: 0.05rem 0.4rem; border-radius: 0.5rem; font-size: 0.75rem; }
+.sm-badge--online { background: #16a34a22; color: #16a34a; }
+.sm-badge--offline { background: #dc262622; color: #dc2626; }
+.sm-badge--active { background: #2563eb22; color: #2563eb; }
+.sm-badge--disconnected { background: #ca8a0422; color: #ca8a04; }
+
+.sm-day-grid {
+    display: grid;
+    grid-template-columns: 6ch 1fr;
+    gap: 0.25rem;
+    align-items: center;
+}
+.sm-slot {
+    display: block;
+    padding: 0.25rem 0.5rem;
+    border: 1px dashed var(--pico-muted-border-color);
+    border-radius: 0.25rem;
+    cursor: pointer;
+    text-align: left;
+    background: transparent;
+}
+.sm-slot--booked {
+    background: var(--pico-primary-background);
+    color: var(--pico-primary-inverse);
+    cursor: default;
+    border-style: solid;
+}
+.sm-slot--past { opacity: 0.5; }
+
+.sm-modal[hidden] { display: none; }
+.sm-modal {
+    position: fixed; inset: 0; background: #0008; display: grid; place-items: center;
+}
+.sm-modal__panel {
+    background: var(--pico-background-color); padding: 1rem;
+    border-radius: 0.5rem; min-width: 320px;
+}

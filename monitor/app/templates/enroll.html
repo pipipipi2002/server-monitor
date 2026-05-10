@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Enroll a server — Server Monitor{% endblock %}
+{% block content %}
+<h2>Enroll a server</h2>
+<form method="post" action="/enroll">
+    <label>Hostname <input name="hostname" required></label>
+    <label>OS
+        <select name="os">
+            <option value="linux">Linux</option>
+            <option value="windows">Windows</option>
+        </select>
+    </label>
+    <button type="submit">Generate install command</button>
+</form>
+
+{% if command %}
+    <article>
+        <h3>Run on <code>{{ command.hostname }}</code></h3>
+        {% if command.os == "linux" %}
+            <pre><code>curl -fsSL https://{{ monitor_host }}/install.sh | sudo bash -s -- \
+  --token {{ command.token }} \
+  --hostname {{ command.hostname }}</code></pre>
+        {% else %}
+            <pre><code>iwr https://{{ monitor_host }}/install.ps1 -UseBasicParsing | iex; `
+Install-MonitorAgent -Token {{ command.token }} -Hostname {{ command.hostname }}</code></pre>
+        {% endif %}
+        <p><small>Token is one-time; expires in {{ 3600 }} seconds.</small></p>
+    </article>
+{% endif %}
+
+<h3>Servers</h3>
+<table>
+    <thead><tr><th>Hostname</th><th>OS</th><th>Status</th><th>Last seen</th><th></th></tr></thead>
+    <tbody>
+        {% for r in rows %}
+        <tr>
+            <td>{{ r.hostname }}</td>
+            <td>{{ r.os }}</td>
+            <td>{% if r.enrolled %}enrolled{% else %}pending{% endif %}</td>
+            <td><small data-iso="{{ r.last_seen_at }}"></small></td>
+            <td>
+                <form method="post" action="/enroll/{{ r.id }}/reset"
+                      onsubmit="return confirm('Generate a new enrollment token? The old agent will stop working.');">
+                    <button type="submit" class="secondary">Reset</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

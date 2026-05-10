@@ -1,0 +1,30 @@
+<article class="sm-card" id="server-{{ s.id }}">
+    <header>
+        <h3>
+            <a href="/server/{{ s.id }}">{{ s.hostname }}</a>
+            <small>({{ s.os }})</small>
+        </h3>
+        {% if not s.enrolled %}
+            <span class="sm-badge sm-badge--offline">pending enroll</span>
+        {% elif s.online %}
+            <span class="sm-badge sm-badge--online">agent online</span>
+        {% else %}
+            <span class="sm-badge sm-badge--offline">agent offline</span>
+        {% endif %}
+    </header>
+
+    {% if s.sessions %}
+        <ul>
+            {% for sess in s.sessions %}
+                <li>
+                    <strong>{{ sess.alias or sess.device_name }}</strong>
+                    {% if sess.alias %}<small>({{ sess.device_name }})</small>{% endif %}
+                    <span class="sm-badge sm-badge--{{ sess.state }}">{{ sess.state }}</span>
+                    <small><span data-iso="{{ sess.logon_at }}"></span></small>
+                </li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p><em>No active sessions.</em></p>
+    {% endif %}
+</article>

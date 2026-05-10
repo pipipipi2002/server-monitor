@@ -1,0 +1,13 @@
+<tr>
+    <td><code>{{ row.device_name }}</code></td>
+    <td>
+        <form method="post" action="/aliases"
+              hx-post="/aliases" hx-swap="outerHTML" hx-target="closest tr">
+            <input type="hidden" name="device_name" value="{{ row.device_name }}">
+            <input name="alias" value="{{ row.alias }}" required>
+            <button type="submit" class="secondary">Save</button>
+        </form>
+    </td>
+    <td><small data-iso="{{ row.updated_at }}"></small></td>
+    <td></td>
+</tr>

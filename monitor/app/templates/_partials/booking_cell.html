@@ -1,0 +1,15 @@
+<div>{{ slot.label }}</div>
+<button type="button"
+        class="sm-slot
+            {% if slot.booking %}sm-slot--booked{% endif %}
+            {% if slot.is_past %}sm-slot--past{% endif %}"
+        {% if slot.booking %}
+            data-booking-id="{{ slot.booking.id }}"
+            data-booking-member="{{ slot.booking.member_name }}"
+            disabled
+        {% else %}
+            x-on:click="$dispatch('sm-open-booking', { startAt: '{{ slot.start_at }}', label: '{{ slot.label }}' })"
+            {% if slot.is_past %}disabled{% endif %}
+        {% endif %}>
+    {% if slot.booking %}{{ slot.booking.member_name }}{% else %}+{% endif %}
+</button>

@@ -1,0 +1,7 @@
+<div class="sm-grid" id="server-grid">
+    {% for s in servers %}
+        {% include "_partials/server_card.html" %}
+    {% else %}
+        <p>No servers yet. <a href="/enroll">Add one</a>.</p>
+    {% endfor %}
+</div>

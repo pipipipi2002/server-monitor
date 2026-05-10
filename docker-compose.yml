@@ -1,0 +1,37 @@
+services:
+  monitor:
+    build: ./monitor
+    environment:
+      MONITOR_HOST: ${MONITOR_HOST:-monitor.lan}
+      DISPLAY_TZ: ${DISPLAY_TZ:-UTC}
+      ENROLLMENT_TOKEN_TTL: ${ENROLLMENT_TOKEN_TTL:-3600}
+      BCRYPT_COST: ${BCRYPT_COST:-10}
+      DB_PATH: /data/server-monitor.sqlite
+      AGENT_DIST_DIR: /agents-dist
+      CADDY_CA_PATH: /caddy/data/caddy/pki/authorities/local/root.crt
+    volumes:
+      - ./data:/data
+      - ./agents-dist:/agents-dist:ro
+      - caddy_data:/caddy/data:ro
+    expose:
+      - "8000"
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2
+    environment:
+      MONITOR_HOST: ${MONITOR_HOST:-monitor.lan}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - monitor
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:

@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Aliases — Server Monitor{% endblock %}
+{% block content %}
+<h2>Device aliases</h2>
+<p>Map raw device names to people. Anyone on the LAN can add or change these.</p>
+
+<table>
+    <thead><tr><th>Device name</th><th>Alias</th><th>Updated</th><th></th></tr></thead>
+    <tbody id="alias-tbody">
+        {% for row in rows %}
+            {% include "_partials/alias_row.html" %}
+        {% endfor %}
+    </tbody>
+</table>
+
+<h3>Add or change an alias</h3>
+<form method="post" action="/aliases" hx-post="/aliases" hx-target="#alias-tbody" hx-swap="afterbegin">
+    <input name="device_name" placeholder="DESKTOP-AB12C" required>
+    <input name="alias" placeholder="alice" required>
+    <button type="submit">Save</button>
+</form>
+{% endblock %}
