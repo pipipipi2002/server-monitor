@@ -17,12 +17,22 @@
     <article>
         <h3>Run on <code>{{ command.hostname }}</code></h3>
         {% if command.os == "linux" %}
+            <h4>For server with CA root installed:</h4>
             <pre><code>curl -fsSL https://{{ monitor_host }}/install.sh | sudo bash -s -- \
   --token {{ command.token }} \
   --hostname {{ command.hostname }}</code></pre>
+            <h4>For server with <b>no</b> CA root installed:</h4>
+            <pre><code>curl -fsSL http://{{ monitor_host }}/install.sh | sudo bash -s -- \
+  --token {{ command.token }} \
+  --hostname {{ command.hostname }}
+  --monitor-url https://{{ monitor_host }}</code></pre>
         {% else %}
+            <h4>For server with CA root installed:</h4>
             <pre><code>iwr https://{{ monitor_host }}/install.ps1 -UseBasicParsing | iex; `
 Install-MonitorAgent -Token {{ command.token }} -Hostname {{ command.hostname }}</code></pre>
+            <h4>For server with <b>no</b> CA root installed:</h4>
+            <pre><code>iwr http://{{ monitor_host }}/install.ps1 -UseBasicParsing | iex; `
+Install-MonitorAgent -Token {{ command.token }} -Hostname {{ command.hostname }} -MonitorUrl https://{{ monitor_host }}</code></pre>
         {% endif %}
         <p><small>Token is one-time; expires in {{ 3600 }} seconds.</small></p>
     </article>
