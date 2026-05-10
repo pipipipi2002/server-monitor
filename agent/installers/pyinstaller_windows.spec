@@ -1,5 +1,5 @@
 # PyInstaller spec for the Windows agent.
-# Build (on a Windows host):
+# Build (on a Windows host, ideally Server 2019 to be safe for older deploys):
 #   pyinstaller --clean --distpath .\agents-dist agent\installers\pyinstaller_windows.spec
 
 block_cipher = None
@@ -11,7 +11,21 @@ a = Analysis(
     datas=[],
     hiddenimports=[
         "server_monitor_agent.collect_windows",
-        "win32ts", "win32serviceutil", "win32service", "win32event", "servicemanager",
+        "server_monitor_agent.service_windows",
+        # Pywin32 service host. The first four are imported by service_windows;
+        # the rest are typical pywin32 deps that PyInstaller's static analysis
+        # sometimes misses. pythoncom + pywintypes are particularly important
+        # because servicemanager.StartServiceCtrlDispatcher uses them at runtime
+        # via dynamic loading.
+        "win32ts",
+        "win32serviceutil",
+        "win32service",
+        "win32event",
+        "servicemanager",
+        "win32api",
+        "pythoncom",
+        "pywintypes",
+        "win32timezone",
     ],
     hookspath=[],
     hooksconfig={},

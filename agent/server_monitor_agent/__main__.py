@@ -46,6 +46,22 @@ async def _cmd_run(args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    if argv is None:
+        argv = sys.argv[1:]
+
+    # When SCM launches a Windows service, the binary is invoked with no extra
+    # arguments. Detect that and hand off to pywin32's service control
+    # dispatcher (defined in service_windows.py). Configuration flows in via
+    # environment variables that install.ps1 writes into the service's
+    # registry Environment block.
+    if not argv and sys.platform == "win32":
+        try:
+            from server_monitor_agent.service_windows import enter_service_dispatcher
+        except ImportError as e:
+            print(f"service mode requires pywin32: {e!r}", file=sys.stderr)
+            return 2
+        return enter_service_dispatcher()
+
     p = argparse.ArgumentParser(prog="server-monitor-agent")
     p.add_argument(
         "--monitor-url",

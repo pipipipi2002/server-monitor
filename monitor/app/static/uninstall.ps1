@@ -26,19 +26,10 @@ function Uninstall-MonitorAgent {
     $ServiceName = "ServerMonitorAgent"
 
     Write-Host "==> stopping and removing service"
-    $NssmPath = "$InstallDir\nssm.exe"
     if (Get-Service -Name $ServiceName -ErrorAction SilentlyContinue) {
-        if (Test-Path $NssmPath) {
-            # Prefer NSSM since it's how we registered it; cleaner unregister.
-            & $NssmPath stop $ServiceName 2>$null | Out-Null
-            & $NssmPath remove $ServiceName confirm 2>$null | Out-Null
-        } else {
-            # Fallback for installs that pre-date the NSSM-based registration.
-            Stop-Service -Name $ServiceName -Force -ErrorAction SilentlyContinue
-            & sc.exe delete $ServiceName | Out-Null
-        }
-        # sc.exe / nssm remove are asynchronous; let SCM finish before tearing
-        # down files so $InstallDir\nssm.exe isn't held open.
+        Stop-Service -Name $ServiceName -Force -ErrorAction SilentlyContinue
+        & sc.exe delete $ServiceName | Out-Null
+        # sc.exe delete is asynchronous; let SCM finish before tearing down files.
         Start-Sleep -Seconds 2
     }
 

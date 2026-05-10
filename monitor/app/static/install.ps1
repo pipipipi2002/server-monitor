@@ -105,50 +105,52 @@ function Install-MonitorAgent {
     & $ExePath --monitor-url $MonitorUrl --hostname $Hostname --token-file $TokenPath `
                --ca-bundle $CaPath enroll --enrollment-token $Token
 
-    # 5. Register and start the service via NSSM.
+    # 5. Register and start the service.
     #
-    # Why NSSM: Windows Service Control Manager (SCM) expects a service binary to
-    # implement the SCM protocol (call SetServiceStatus(SERVICE_RUNNING) within
-    # ~30s of launch). Our agent is a plain console app, so SCM would time out
-    # and report "service did not start in a timely manner" even though the
-    # process is happily running.
+    # The agent binary contains a pywin32-backed Windows service entry: when it's
+    # launched with no command-line arguments (which is how SCM starts it), the
+    # __main__.main() function dispatches to StartServiceCtrlDispatcher, which
+    # calls SetServiceStatus(SERVICE_RUNNING) and SCM is happy.
     #
-    # NSSM (https://nssm.cc) is a tiny service wrapper that fronts SCM, runs our
-    # console binary as a subprocess, and translates SCM control signals into
-    # process start/stop. Mature, single-file, MIT-licensed.
-    #
-    # Operator prerequisite: nssm.exe (win64 build) must be present in the
-    # monitor's agents-dist/ directory. See README "Setup -> 3. Build the
-    # Windows agent binary" for the one-time download instructions.
-    Write-Host "==> downloading service wrapper (NSSM)"
-    $NssmPath = "$InstallDir\nssm.exe"
-    Invoke-WebRequest "$MonitorUrl/api/agent-helper/nssm.exe" `
-                      -UseBasicParsing -OutFile $NssmPath
-
+    # Configuration is passed through environment variables that we write into
+    # the service's registry Environment block (REG_MULTI_SZ). The service
+    # process inherits these from SCM at start time.
     Write-Host "==> registering service"
+
+    # Remove any pre-existing instance.
     if (Get-Service -Name $ServiceName -ErrorAction SilentlyContinue) {
-        & $NssmPath stop $ServiceName 2>$null | Out-Null
-        & $NssmPath remove $ServiceName confirm 2>$null | Out-Null
+        Stop-Service -Name $ServiceName -Force -ErrorAction SilentlyContinue
+        & sc.exe delete $ServiceName | Out-Null
+        # sc.exe delete is asynchronous; wait briefly so the create below
+        # doesn't hit "service marked for deletion".
         Start-Sleep -Seconds 2
     }
 
-    & $NssmPath install $ServiceName $ExePath | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw "nssm install failed with exit code $LASTEXITCODE" }
+    # Register with NO arguments — that's how the binary detects "running as a
+    # service" and dispatches into the pywin32 service framework.
+    $binPath = '"{0}"' -f $ExePath
+    New-Service -Name $ServiceName `
+                -BinaryPathName $binPath `
+                -DisplayName "Server Monitor Agent" `
+                -Description "Reports RDP session activity to the server-monitor service." `
+                -StartupType Automatic | Out-Null
 
-    $appParams = ('--monitor-url {0} --hostname {1} ' +
-                  '--token-file "{2}" --ca-bundle "{3}" run') -f
-                  $MonitorUrl, $Hostname, $TokenPath, $CaPath
-    & $NssmPath set $ServiceName AppParameters $appParams | Out-Null
-    & $NssmPath set $ServiceName DisplayName "Server Monitor Agent" | Out-Null
-    & $NssmPath set $ServiceName Description "Reports RDP session activity to the server-monitor service." | Out-Null
-    & $NssmPath set $ServiceName Start SERVICE_AUTO_START | Out-Null
-    & $NssmPath set $ServiceName AppRestartDelay 5000 | Out-Null
-    # Capture stdout/stderr to a log file with rotation. Useful for "the service
-    # is running but not reporting" debugging.
-    & $NssmPath set $ServiceName AppStdout "$DataDir\agent.log" | Out-Null
-    & $NssmPath set $ServiceName AppStderr "$DataDir\agent.log" | Out-Null
-    & $NssmPath set $ServiceName AppRotateFiles 1 | Out-Null
-    & $NssmPath set $ServiceName AppRotateBytes 1048576 | Out-Null
+    # Service environment variables (REG_MULTI_SZ at the service's registry
+    # path). The pywin32 service reads these in SvcDoRun.
+    $svcRegPath = "HKLM:\SYSTEM\CurrentControlSet\Services\$ServiceName"
+    $envValues = @(
+        "MONITOR_URL=$MonitorUrl",
+        "MONITOR_HOSTNAME=$Hostname",
+        "MONITOR_TOKEN_FILE=$TokenPath",
+        "MONITOR_CA_BUNDLE=$CaPath"
+    )
+    Set-ItemProperty -Path $svcRegPath -Name Environment -Value $envValues -Type MultiString
+
+    # Configure restart-on-failure (no PS cmdlet equivalent in PS 5.1).
+    & sc.exe failure $ServiceName reset= 60 actions= restart/5000/restart/5000/restart/5000 | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warning "sc.exe failure exited with $LASTEXITCODE; continuing anyway"
+    }
 
     Start-Service -Name $ServiceName
     Get-Service -Name $ServiceName

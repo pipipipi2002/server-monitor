@@ -80,13 +80,7 @@ py -3.12 -m venv .venv
 
 Copy `agents-dist\agent-windows.exe` back to the monitor host's `agents-dist/` directory before bringing the stack up.
 
-**Also drop `nssm.exe` into `agents-dist/` (one-time).** The agent is a console application, not a Windows service binary, so it doesn't speak the SCM protocol that Windows requires. We use [NSSM](https://nssm.cc) — a small, mature, MIT-licensed service wrapper — to register and manage the service. Steps:
-
-1. Download `nssm-2.24.zip` from https://nssm.cc/release/nssm-2.24.zip on any machine with internet.
-2. Extract `nssm-2.24/win64/nssm.exe` from the zip.
-3. Copy `nssm.exe` into your `agents-dist/` directory next to `agent-windows.exe`.
-
-The Windows install command serves it from there via `https://${MONITOR_HOST}/api/agent-helper/nssm.exe` during agent enrollment. A 32-bit version exists at `nssm-2.24/win32/nssm.exe` if you have Windows hosts that need it; replace the win64 step with that.
+The bundled binary is a proper Windows service (uses `pywin32`'s `ServiceFramework` internally) — when SCM launches it with no arguments, it dispatches into the service control loop and reports `SERVICE_RUNNING` correctly. No external service wrapper required.
 
 ### 4 — Bring it up
 
