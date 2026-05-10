@@ -215,6 +215,22 @@ def install_ps1() -> PlainTextResponse:
     )
 
 
+@router.get("/uninstall.sh", response_class=PlainTextResponse)
+def uninstall_sh() -> PlainTextResponse:
+    return PlainTextResponse(
+        (_STATIC_DIR / "uninstall.sh").read_text(),
+        media_type="text/x-shellscript; charset=utf-8",
+    )
+
+
+@router.get("/uninstall.ps1", response_class=PlainTextResponse)
+def uninstall_ps1() -> PlainTextResponse:
+    return PlainTextResponse(
+        (_STATIC_DIR / "uninstall.ps1").read_text(),
+        media_type="text/plain; charset=utf-8",
+    )
+
+
 @router.get("/ca.crt")
 def ca_crt():
     p = Path(_os.environ.get("CADDY_CA_PATH", "/caddy/data/caddy/pki/authorities/local/root.crt"))

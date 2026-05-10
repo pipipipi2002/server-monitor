@@ -58,4 +58,30 @@ Install-MonitorAgent -Token {{ command.token }} -Hostname {{ command.hostname }}
         {% endfor %}
     </tbody>
 </table>
+
+<h3>Uninstall an agent</h3>
+<p>
+    Run on the host you want to decommission. Stops the service, removes the binary, the
+    agent token, and (on Windows) the monitor's CA cert from the trust store. The server's
+    row stays in this table afterwards with an <em>agent offline</em> badge — remove it
+    manually via the SQLite recipe in the README when you're done.
+</p>
+
+<details>
+    <summary><strong>Linux</strong> — run as root</summary>
+    <h4>For host with CA root installed:</h4>
+    <pre><code>curl -fsSL https://{{ monitor_host }}/uninstall.sh | sudo bash</code></pre>
+    <h4>For host with <b>no</b> CA root installed (e.g. Traefik HTTP path):</h4>
+    <pre><code>curl -fsSL http://{{ monitor_host }}/uninstall.sh | sudo bash</code></pre>
+</details>
+
+<details>
+    <summary><strong>Windows</strong> — run from elevated PowerShell</summary>
+    <h4>For host with CA root installed:</h4>
+    <pre><code>iwr https://{{ monitor_host }}/uninstall.ps1 -UseBasicParsing | iex
+Uninstall-MonitorAgent</code></pre>
+    <h4>For host with <b>no</b> CA root installed (e.g. Traefik HTTP path):</h4>
+    <pre><code>iwr http://{{ monitor_host }}/uninstall.ps1 -UseBasicParsing | iex
+Uninstall-MonitorAgent</code></pre>
+</details>
 {% endblock %}

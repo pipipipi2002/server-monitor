@@ -105,38 +105,50 @@ function Install-MonitorAgent {
     & $ExePath --monitor-url $MonitorUrl --hostname $Hostname --token-file $TokenPath `
                --ca-bundle $CaPath enroll --enrollment-token $Token
 
-    # 5. Register and start the service.
-    Write-Host "==> registering service"
+    # 5. Register and start the service via NSSM.
+    #
+    # Why NSSM: Windows Service Control Manager (SCM) expects a service binary to
+    # implement the SCM protocol (call SetServiceStatus(SERVICE_RUNNING) within
+    # ~30s of launch). Our agent is a plain console app, so SCM would time out
+    # and report "service did not start in a timely manner" even though the
+    # process is happily running.
+    #
+    # NSSM (https://nssm.cc) is a tiny service wrapper that fronts SCM, runs our
+    # console binary as a subprocess, and translates SCM control signals into
+    # process start/stop. Mature, single-file, MIT-licensed.
+    #
+    # Operator prerequisite: nssm.exe (win64 build) must be present in the
+    # monitor's agents-dist/ directory. See README "Setup -> 3. Build the
+    # Windows agent binary" for the one-time download instructions.
+    Write-Host "==> downloading service wrapper (NSSM)"
+    $NssmPath = "$InstallDir\nssm.exe"
+    Invoke-WebRequest "$MonitorUrl/api/agent-helper/nssm.exe" `
+                      -UseBasicParsing -OutFile $NssmPath
 
-    # Remove any pre-existing instance so we can re-create cleanly.
+    Write-Host "==> registering service"
     if (Get-Service -Name $ServiceName -ErrorAction SilentlyContinue) {
-        Stop-Service -Name $ServiceName -Force -ErrorAction SilentlyContinue
-        & sc.exe delete $ServiceName | Out-Null
-        # sc.exe delete is asynchronous; wait briefly for the SCM record to clear
-        # before creating again.
+        & $NssmPath stop $ServiceName 2>$null | Out-Null
+        & $NssmPath remove $ServiceName confirm 2>$null | Out-Null
         Start-Sleep -Seconds 2
     }
 
-    # Build the binPath string SCM stores in the registry. Embedded quotes wrap
-    # paths-with-spaces; the whole thing is passed as one typed parameter to
-    # New-Service so PowerShell doesn't mangle it (the reason `sc.exe create`
-    # was unreliable here).
-    $binArgs = ('--monitor-url {0} --hostname {1} ' +
-                '--token-file "{2}" --ca-bundle "{3}" run') -f
-                $MonitorUrl, $Hostname, $TokenPath, $CaPath
-    $binPath = '"{0}" {1}' -f $ExePath, $binArgs
+    & $NssmPath install $ServiceName $ExePath | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "nssm install failed with exit code $LASTEXITCODE" }
 
-    New-Service -Name $ServiceName `
-                -BinaryPathName $binPath `
-                -DisplayName "Server Monitor Agent" `
-                -Description "Reports RDP session activity to the server-monitor service." `
-                -StartupType Automatic | Out-Null
-
-    # Configure restart-on-failure (no PS cmdlet equivalent in PS 5.1).
-    & sc.exe failure $ServiceName reset= 60 actions= restart/5000/restart/5000/restart/5000 | Out-Null
-    if ($LASTEXITCODE -ne 0) {
-        Write-Warning "sc.exe failure exited with $LASTEXITCODE; continuing anyway"
-    }
+    $appParams = ('--monitor-url {0} --hostname {1} ' +
+                  '--token-file "{2}" --ca-bundle "{3}" run') -f
+                  $MonitorUrl, $Hostname, $TokenPath, $CaPath
+    & $NssmPath set $ServiceName AppParameters $appParams | Out-Null
+    & $NssmPath set $ServiceName DisplayName "Server Monitor Agent" | Out-Null
+    & $NssmPath set $ServiceName Description "Reports RDP session activity to the server-monitor service." | Out-Null
+    & $NssmPath set $ServiceName Start SERVICE_AUTO_START | Out-Null
+    & $NssmPath set $ServiceName AppRestartDelay 5000 | Out-Null
+    # Capture stdout/stderr to a log file with rotation. Useful for "the service
+    # is running but not reporting" debugging.
+    & $NssmPath set $ServiceName AppStdout "$DataDir\agent.log" | Out-Null
+    & $NssmPath set $ServiceName AppStderr "$DataDir\agent.log" | Out-Null
+    & $NssmPath set $ServiceName AppRotateFiles 1 | Out-Null
+    & $NssmPath set $ServiceName AppRotateBytes 1048576 | Out-Null
 
     Start-Service -Name $ServiceName
     Get-Service -Name $ServiceName

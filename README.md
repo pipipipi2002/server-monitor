@@ -68,7 +68,7 @@ Produces `agents-dist/agent-linux-x86_64` (~12 MB, single-file, no Python runtim
 
 ### 3 — Build the Windows agent binary (only if you have Windows servers)
 
-On a Windows host with Python 3.12 and an admin PowerShell:
+On a Windows host with Python 3.12 and an admin PowerShell. **Build on the oldest Windows version you'll deploy to** (e.g. Server 2019 if that's your floor). PyInstaller binaries built on a newer Windows can include references to APIs that don't exist on older versions, surfacing as runtime DLL load failures. Newer-to-older direction is the risky one; the same-or-older direction is safe.
 
 ```powershell
 git clone <this-repo>
@@ -79,6 +79,14 @@ py -3.12 -m venv .venv
 ```
 
 Copy `agents-dist\agent-windows.exe` back to the monitor host's `agents-dist/` directory before bringing the stack up.
+
+**Also drop `nssm.exe` into `agents-dist/` (one-time).** The agent is a console application, not a Windows service binary, so it doesn't speak the SCM protocol that Windows requires. We use [NSSM](https://nssm.cc) — a small, mature, MIT-licensed service wrapper — to register and manage the service. Steps:
+
+1. Download `nssm-2.24.zip` from https://nssm.cc/release/nssm-2.24.zip on any machine with internet.
+2. Extract `nssm-2.24/win64/nssm.exe` from the zip.
+3. Copy `nssm.exe` into your `agents-dist/` directory next to `agent-windows.exe`.
+
+The Windows install command serves it from there via `https://${MONITOR_HOST}/api/agent-helper/nssm.exe` during agent enrollment. A 32-bit version exists at `nssm-2.24/win32/nssm.exe` if you have Windows hosts that need it; replace the win64 step with that.
 
 ### 4 — Bring it up
 
@@ -166,10 +174,46 @@ The cascading FK on sessions/bookings/reports tidies the rest. (A delete button 
 
 ### Stopping an agent on a server
 
+Use this when you want the agent to stop reporting *temporarily* — the binary, token, and CA cert stay on disk for fast restart.
+
 **Linux:** `sudo systemctl stop server-monitor-agent && sudo systemctl disable server-monitor-agent`
-**Windows:** `Stop-Service ServerMonitorAgent; sc.exe delete ServerMonitorAgent` (admin PowerShell).
+**Windows (admin PowerShell):** `Stop-Service ServerMonitorAgent`
 
 The dashboard will mark the server "agent offline" within ~60 s.
+
+### Uninstalling an agent from a server
+
+Use this when you're decommissioning the host or moving it to a different monitor. Runs from the same one-line pattern as install — fetches a script from the monitor and executes it.
+
+**Linux** (run as root):
+
+```bash
+# If the host has the monitor's CA installed
+curl -fsSL https://${MONITOR_HOST}/uninstall.sh | sudo bash
+
+# Or, if the host doesn't trust the CA (e.g. Traefik HTTP-only path on the dashboard)
+curl -fsSL http://${MONITOR_HOST}/uninstall.sh | sudo bash
+```
+
+**Windows** (elevated PowerShell):
+
+```powershell
+iwr https://${MONITOR_HOST}/uninstall.ps1 -UseBasicParsing | iex
+Uninstall-MonitorAgent
+```
+
+What it does, in order:
+
+1. Stops the service (`server-monitor-agent` on Linux, `ServerMonitorAgent` on Windows).
+2. Deletes the service registration (systemd unit / SCM entry).
+3. On Windows, removes the monitor's CA from `Cert:\LocalMachine\Root` (best-effort — warns if it can't, doesn't abort).
+4. Removes the binary at `/usr/local/bin/server-monitor-agent` or `C:\Program Files\server-monitor-agent\`.
+5. Removes the data directory (`/etc/server-monitor-agent` or `%ProgramData%\server-monitor-agent`), including the agent token and pinned CA cert.
+6. On Windows, resets ACLs on the data directory before deletion so a previously locked-down install can still be cleaned up.
+
+The uninstall doesn't reach back to the monitor — the dashboard will keep showing the host with an "agent offline" badge afterwards. If you want to remove that row entirely, follow the **Removing a server** section above (one-line SQLite delete). This separation is intentional: a typo on the host shouldn't wipe historical session and booking records on the monitor.
+
+The uninstall commands are also displayed at the bottom of the dashboard's `/enroll` page for easy copy-paste.
 
 ### Viewing logs
 

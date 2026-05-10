@@ -143,3 +143,25 @@ def agent_binary(os: str, arch: str = "x86_64") -> FileResponse:
     if not p.exists():
         raise HTTPException(status_code=404, detail="binary not built yet")
     return FileResponse(p, filename=name, media_type="application/octet-stream")
+
+
+import re as _re
+
+
+@router.get("/agent-helper/{name}")
+def agent_helper(name: str) -> FileResponse:
+    """Serve auxiliary files (e.g. nssm.exe) from the same agents-dist mount.
+
+    Restricted to a tight character set to prevent path traversal; the file must
+    already exist in the AGENT_DIST_DIR — the operator places it there once.
+    """
+    if not _re.match(r"^[A-Za-z0-9._-]+$", name):
+        raise HTTPException(status_code=400, detail="invalid helper name")
+    dist = Path(_os.environ.get("AGENT_DIST_DIR", "/agents-dist"))
+    p = dist / name
+    if not p.exists():
+        raise HTTPException(
+            status_code=404,
+            detail=f"{name} not present in agents-dist; see README for prerequisites",
+        )
+    return FileResponse(p, filename=name, media_type="application/octet-stream")
