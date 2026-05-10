@@ -2,27 +2,10 @@
 # Usage:
 #   iwr http://<monitor>/install.ps1 -UseBasicParsing | iex
 #   Install-MonitorAgent -Token <T> -MonitorUrl https://<monitor>
-
-# WORKAROUND for trust-on-first-use CA fetch:
-# `[Net.ServicePointManager]::ServerCertificateValidationCallback = {$true}` looks
-# fine but breaks at runtime — .NET invokes the callback on a TLS background thread
-# that has no PowerShell runspace, so the ScriptBlock crashes and the connection
-# is closed mid-handshake. The error message is the misleading
-# "The underlying connection was closed: An unexpected error occurred on a send."
-# Using the older ICertificatePolicy interface, defined in inline C# so .NET can
-# call it from any thread, sidesteps the issue. Compiled once per session.
-if (-not ('SmTrustAllCertsPolicy' -as [type])) {
-    Add-Type -TypeDefinition @"
-        using System.Net;
-        using System.Security.Cryptography.X509Certificates;
-        public class SmTrustAllCertsPolicy : ICertificatePolicy {
-            public bool CheckValidationResult(
-                ServicePoint sp, X509Certificate cert, WebRequest req, int err) {
-                return true;
-            }
-        }
-"@
-}
+#
+# Compatible with Windows PowerShell 5.1 (Server 2016/2019/2022/2025, Win10/11
+# default) and PowerShell 7+ (`pwsh`). The cert-bypass mechanism for the one-time
+# CA fetch differs between the two; see the branch in step 1 below.
 
 function Install-MonitorAgent {
     [CmdletBinding()]
@@ -34,8 +17,14 @@ function Install-MonitorAgent {
     # Abort on first error so we don't print "==> done" after a half-finished install.
     $ErrorActionPreference = 'Stop'
 
-    # PowerShell 5.1 (Windows Server 2016/2019) defaults to TLS 1.0/1.1; Caddy
-    # requires TLS 1.2+. Set it before any HTTPS call.
+    # PowerShell 7+ uses HttpClient under the hood for Invoke-WebRequest and offers
+    # a native -SkipCertificateCheck. PowerShell 5.1 uses WebRequest and needs the
+    # ICertificatePolicy workaround (see PS 5.1 branch in step 1).
+    $isPs7Plus = $PSVersionTable.PSVersion.Major -ge 6
+
+    # PowerShell 5.1 defaults to TLS 1.0/1.1; Caddy requires TLS 1.2+. This setting
+    # affects WebRequest-based calls. PS 7's HttpClient ignores it and negotiates
+    # protocols itself — harmless either way.
     try {
         [Net.ServicePointManager]::SecurityProtocol = `
             [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls13
@@ -59,12 +48,38 @@ function Install-MonitorAgent {
 
     # 1. Trust monitor CA (one-time, fetched with verification disabled — TOFU).
     Write-Host "==> downloading monitor CA"
-    $priorCertPolicy = [System.Net.ServicePointManager]::CertificatePolicy
-    [System.Net.ServicePointManager]::CertificatePolicy = New-Object SmTrustAllCertsPolicy
-    try {
-        Invoke-WebRequest "$MonitorUrl/ca.crt" -UseBasicParsing -OutFile $CaPath
-    } finally {
-        [System.Net.ServicePointManager]::CertificatePolicy = $priorCertPolicy
+    $caFetchArgs = @{
+        Uri             = "$MonitorUrl/ca.crt"
+        UseBasicParsing = $true
+        OutFile         = $CaPath
+    }
+    if ($isPs7Plus) {
+        # PS 7+: native parameter, no global state mutation needed.
+        Invoke-WebRequest @caFetchArgs -SkipCertificateCheck
+    } else {
+        # PS 5.1 workaround. ServerCertificateValidationCallback with a ScriptBlock
+        # fails ("no Runspace available") because .NET invokes the callback on a
+        # TLS background thread with no PowerShell runspace. ICertificatePolicy
+        # implemented in inline C# is callable from any thread.
+        if (-not ('SmTrustAllCertsPolicy' -as [type])) {
+            Add-Type -TypeDefinition @"
+                using System.Net;
+                using System.Security.Cryptography.X509Certificates;
+                public class SmTrustAllCertsPolicy : ICertificatePolicy {
+                    public bool CheckValidationResult(
+                        ServicePoint sp, X509Certificate cert, WebRequest req, int err) {
+                        return true;
+                    }
+                }
+"@
+        }
+        $priorCertPolicy = [System.Net.ServicePointManager]::CertificatePolicy
+        [System.Net.ServicePointManager]::CertificatePolicy = New-Object SmTrustAllCertsPolicy
+        try {
+            Invoke-WebRequest @caFetchArgs
+        } finally {
+            [System.Net.ServicePointManager]::CertificatePolicy = $priorCertPolicy
+        }
     }
     Import-Certificate -FilePath $CaPath -CertStoreLocation Cert:\LocalMachine\Root | Out-Null
 
@@ -92,15 +107,38 @@ function Install-MonitorAgent {
 
     # 5. Register and start the service.
     Write-Host "==> registering service"
+
+    # Remove any pre-existing instance so we can re-create cleanly.
     if (Get-Service -Name $ServiceName -ErrorAction SilentlyContinue) {
-        sc.exe stop $ServiceName | Out-Null
-        sc.exe delete $ServiceName | Out-Null
+        Stop-Service -Name $ServiceName -Force -ErrorAction SilentlyContinue
+        & sc.exe delete $ServiceName | Out-Null
+        # sc.exe delete is asynchronous; wait briefly for the SCM record to clear
+        # before creating again.
+        Start-Sleep -Seconds 2
     }
-    $binPath = "`"$ExePath`" --monitor-url $MonitorUrl --hostname $Hostname " +
-               "--token-file `"$TokenPath`" --ca-bundle `"$CaPath`" run"
-    sc.exe create $ServiceName binPath= "$binPath" start= auto displayName= "Server Monitor Agent" | Out-Null
-    sc.exe failure $ServiceName reset= 60 actions= restart/5000/restart/5000/restart/5000 | Out-Null
-    Start-Service $ServiceName
-    Get-Service $ServiceName
+
+    # Build the binPath string SCM stores in the registry. Embedded quotes wrap
+    # paths-with-spaces; the whole thing is passed as one typed parameter to
+    # New-Service so PowerShell doesn't mangle it (the reason `sc.exe create`
+    # was unreliable here).
+    $binArgs = ('--monitor-url {0} --hostname {1} ' +
+                '--token-file "{2}" --ca-bundle "{3}" run') -f
+                $MonitorUrl, $Hostname, $TokenPath, $CaPath
+    $binPath = '"{0}" {1}' -f $ExePath, $binArgs
+
+    New-Service -Name $ServiceName `
+                -BinaryPathName $binPath `
+                -DisplayName "Server Monitor Agent" `
+                -Description "Reports RDP session activity to the server-monitor service." `
+                -StartupType Automatic | Out-Null
+
+    # Configure restart-on-failure (no PS cmdlet equivalent in PS 5.1).
+    & sc.exe failure $ServiceName reset= 60 actions= restart/5000/restart/5000/restart/5000 | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warning "sc.exe failure exited with $LASTEXITCODE; continuing anyway"
+    }
+
+    Start-Service -Name $ServiceName
+    Get-Service -Name $ServiceName
     Write-Host "==> done"
 }
