@@ -2,6 +2,28 @@
 # Usage:
 #   iwr http://<monitor>/install.ps1 -UseBasicParsing | iex
 #   Install-MonitorAgent -Token <T> -MonitorUrl https://<monitor>
+
+# WORKAROUND for trust-on-first-use CA fetch:
+# `[Net.ServicePointManager]::ServerCertificateValidationCallback = {$true}` looks
+# fine but breaks at runtime — .NET invokes the callback on a TLS background thread
+# that has no PowerShell runspace, so the ScriptBlock crashes and the connection
+# is closed mid-handshake. The error message is the misleading
+# "The underlying connection was closed: An unexpected error occurred on a send."
+# Using the older ICertificatePolicy interface, defined in inline C# so .NET can
+# call it from any thread, sidesteps the issue. Compiled once per session.
+if (-not ('SmTrustAllCertsPolicy' -as [type])) {
+    Add-Type -TypeDefinition @"
+        using System.Net;
+        using System.Security.Cryptography.X509Certificates;
+        public class SmTrustAllCertsPolicy : ICertificatePolicy {
+            public bool CheckValidationResult(
+                ServicePoint sp, X509Certificate cert, WebRequest req, int err) {
+                return true;
+            }
+        }
+"@
+}
+
 function Install-MonitorAgent {
     [CmdletBinding()]
     param(
@@ -37,11 +59,12 @@ function Install-MonitorAgent {
 
     # 1. Trust monitor CA (one-time, fetched with verification disabled — TOFU).
     Write-Host "==> downloading monitor CA"
-    [Net.ServicePointManager]::ServerCertificateValidationCallback = {$true}
+    $priorCertPolicy = [System.Net.ServicePointManager]::CertificatePolicy
+    [System.Net.ServicePointManager]::CertificatePolicy = New-Object SmTrustAllCertsPolicy
     try {
         Invoke-WebRequest "$MonitorUrl/ca.crt" -UseBasicParsing -OutFile $CaPath
     } finally {
-        [Net.ServicePointManager]::ServerCertificateValidationCallback = $null
+        [System.Net.ServicePointManager]::CertificatePolicy = $priorCertPolicy
     }
     Import-Certificate -FilePath $CaPath -CertStoreLocation Cert:\LocalMachine\Root | Out-Null
 
