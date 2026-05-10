@@ -41,7 +41,9 @@ def _server_view(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
                 "username": s["username"],
             }
         )
-    online = parse_iso(row["last_seen_at"]) >= now() - timedelta(seconds=60) if row["last_seen_at"] else False
+    # 90 s grace beyond the agent's 60 s resync — keep this in sync with the
+    # threshold in app.main._stale_loop.
+    online = parse_iso(row["last_seen_at"]) >= now() - timedelta(seconds=90) if row["last_seen_at"] else False
     return {
         "id": row["id"],
         "hostname": row["hostname"],

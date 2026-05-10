@@ -23,7 +23,9 @@ async def _stale_loop() -> None:
         try:
             settings = get_settings()
             conn = _get_or_create_conn(Path(settings.db_path))
-            stale = check_stale(conn, threshold_seconds=60)
+            # 90 s leaves ~30 s of grace past the agent's 60 s resync interval —
+            # without it we flap online/offline every cycle.
+            stale = check_stale(conn, threshold_seconds=90)
             current = {s["server_id"] for s in stale}
             for s in stale:
                 if s["server_id"] not in _seen_offline:
