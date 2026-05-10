@@ -9,28 +9,28 @@
 #   - No HTTP→HTTPS redirect (browsers explicitly use HTTP via Traefik).
 
 {
-    auto_https disable_redirects
+	auto_https disable_redirects
 }
 
 {$MONITOR_HOST:monitor.services.local}:443 {
-    tls internal
-    encode gzip
+	tls internal
+	encode gzip
 
-    # SSE endpoint needs flushed-on-write semantics. Without these directives,
-    # the proxy buffers events for ~30s before the browser sees them. (Note:
-    # SSE only matters here if some agent-side script subscribes; the dashboard
-    # SSE flows through Traefik, not through this Caddy.)
-    handle /sse {
-        reverse_proxy monitor:8000 {
-            transport http {
-                read_timeout 0
-                response_header_timeout 0
-            }
-            flush_interval -1
-        }
-    }
+	# SSE endpoint needs flushed-on-write semantics. Without these directives,
+	# the proxy buffers events for ~30s before the browser sees them. (Note:
+	# SSE only matters here if some agent-side script subscribes; the dashboard
+	# SSE flows through Traefik, not through this Caddy.)
+	handle /sse {
+		reverse_proxy monitor:8000 {
+			transport http {
+				read_timeout 0
+				response_header_timeout 0
+			}
+			flush_interval -1
+		}
+	}
 
-    handle {
-        reverse_proxy monitor:8000
-    }
+	handle {
+		reverse_proxy monitor:8000
+	}
 }
