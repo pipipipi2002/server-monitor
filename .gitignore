@@ -23,7 +23,7 @@ dist/
 *.exe
 *.msi
 agent-dist/
-agents-dist/
+#agents-dist/
 
 # --- Runtime data & secrets (NEVER commit) ----------------------------------
 .env
