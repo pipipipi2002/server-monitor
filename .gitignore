@@ -21,6 +21,7 @@ dist/
 *.spec
 !agent/installers/*.spec
 *.exe
+!agent-windows.exe
 *.msi
 agent-dist/
 #agents-dist/
