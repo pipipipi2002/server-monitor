@@ -1,0 +1,80 @@
+# docker-compose.traefik.yml — deployment that integrates with an existing Traefik proxy.
+#
+# Use this instead of docker-compose.yml when Traefik is already running on the host
+# and binding port 80 (typical setup with Grafana/Prometheus on `*.services.local`).
+#
+# Architecture:
+#   Browser → Traefik (:80, HTTP)  → monitor:8000   ← plain HTTP on the LAN
+#   Agents  → Caddy   (:443, HTTPS) → monitor:8000   ← TLS via Caddy's internal CA
+#
+# Both flows reach the same monitor container; they take different host ports
+# because Traefik already owns 80 and Caddy owns 443. The agent install scripts
+# distribute Caddy's CA cert to each monitored server as part of enrollment.
+#
+# Quick start:
+#   docker compose -f docker-compose.traefik.yml up -d
+#
+# Prerequisites:
+#   - Traefik running on `proxy_net` (or whichever name your stack uses; edit below).
+#   - DNS: ${MONITOR_HOST} (default `monitor.services.local`) resolves to this host's IP
+#     on every device that needs to reach the dashboard, AND on every monitored server.
+#
+# See docs/integration-traefik.md for the full migration walkthrough.
+
+services:
+  monitor:
+    build: ./monitor
+    container_name: server-monitor
+    environment:
+      MONITOR_HOST: ${MONITOR_HOST:-monitor.services.local}
+      DISPLAY_TZ: ${DISPLAY_TZ:-UTC}
+      ENROLLMENT_TOKEN_TTL: ${ENROLLMENT_TOKEN_TTL:-3600}
+      BCRYPT_COST: ${BCRYPT_COST:-10}
+      DB_PATH: /data/server-monitor.sqlite
+      AGENT_DIST_DIR: /agents-dist
+      CADDY_CA_PATH: /caddy/data/caddy/pki/authorities/local/root.crt
+    volumes:
+      - ./data:/data
+      - ./agents-dist:/agents-dist:ro
+      - caddy_data:/caddy/data:ro          # read-only — exposes Caddy CA via /ca.crt
+    expose:
+      - "8000"
+    networks:
+      - proxy_net                          # joined to the existing Traefik network
+      - monitor_net                        # internal — only Caddy reaches here
+    labels:
+      # Browser traffic via the existing Traefik instance over plain HTTP.
+      - "traefik.enable=true"
+      - "traefik.docker.network=proxy_net"
+      - "traefik.http.routers.monitor.rule=Host(`${MONITOR_HOST:-monitor.services.local}`)"
+      - "traefik.http.routers.monitor.entrypoints=web"
+      - "traefik.http.services.monitor.loadbalancer.server.port=8000"
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2
+    container_name: server-monitor-caddy
+    environment:
+      MONITOR_HOST: ${MONITOR_HOST:-monitor.services.local}
+    ports:
+      - "443:443"                          # ONLY HTTPS — Traefik already owns 80
+    volumes:
+      - ./Caddyfile.traefik:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - monitor_net
+    depends_on:
+      - monitor
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:
+
+networks:
+  proxy_net:
+    external: true
+    # If your existing Traefik stack uses a different network name,
+    # change this to match (e.g. `name: traefik_default`).
+  monitor_net:
